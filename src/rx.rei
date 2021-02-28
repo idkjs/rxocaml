@@ -1,348 +1,377 @@
-(**
+/**
  RxOCaml is an OCaml implementation of {{:https://rx.codeplex.com/}Rx
  Observables}.
- *)
+ */;
 
-(** Provides a set of functions for creating observers. *)
-module Observer : sig
+/** Provides a set of functions for creating observers. */
 
-  (**
+module Observer: {
+  /**
    Creates an observer from the specified closures.
-   
+
    [create on_next] create an observer from the [on_next] closure.
-   
+
    @param on_completed The [on_completed] closure. The default
    implementation does nothing.
    @param on_error The [on_error] closure. The default implementation raises
    the received exception
-   *)
-  val create :
-    ?on_completed:(unit -> unit) ->
-    ?on_error:(exn -> unit) ->
-    ('a -> unit) ->
-    'a RxCore.observer
+   */
 
-  (** Specifies the state of a stateful observer. *)
-  module type ObserverState = sig
+  let create:
+    (~on_completed: unit => unit=?, ~on_error: exn => unit=?, 'a => unit) =>
+    RxCore.observer('a);
 
-    (** Observer's state type. *)
-    type 'a state
+  /** Specifies the state of a stateful observer. */
 
-    (** Observer's initial state. *)
-    val initial_state : unit -> 'a state
+  module type ObserverState = {
+    /** Observer's state type. */
 
-    (** Observer's [on_completed] function that gets the current observer's
-     state and returns the updated state. *)
-    val on_completed : 'a state -> 'a state
+    type state('a);
 
-    (** Observer's [on_error] function that gets an exception and the current
-     observer's state and returns the updated state. *)
-    val on_error : exn -> 'a state -> 'a state
+    /** Observer's initial state. */
 
-    (** Observer's [on_next] function that gets a value and the current
-     observer's state and returns the updated state. *)
-    val on_next : 'a -> 'a state -> 'a state
+    let initial_state: unit => state('a);
 
-  end
+    /** Observer's [on_completed] function that gets the current observer's
+     state and returns the updated state. */
 
-  (** Builds a stateful observer from a module that implements [ObserverState]
-   and a module that implements the mutable state storage. *)
-  module MakeObserverWithState :
-      functor (O : ObserverState) ->
-      functor (D : RxCore.MutableData) -> sig
+    let on_completed: state('a) => state('a);
 
-    (** Creates a stateful observer. Returns the observer and its state. *)
-    val create : unit -> ('a RxCore.observer * 'a O.state D.t)
+    /** Observer's [on_error] function that gets an exception and the current
+     observer's state and returns the updated state. */
 
-  end
+    let on_error: (exn, state('a)) => state('a);
 
-  (**
+    /** Observer's [on_next] function that gets a value and the current
+     observer's state and returns the updated state. */
+
+    let on_next: ('a, state('a)) => state('a);
+  };
+
+  /** Builds a stateful observer from a module that implements [ObserverState]
+   and a module that implements the mutable state storage. */
+
+  module MakeObserverWithState:
+    (O: ObserverState, D: RxCore.MutableData) =>
+     {
+      /** Creates a stateful observer. Returns the observer and its state. */
+
+      let create: unit => (RxCore.observer('a), D.t(O.state('a)));
+    };
+
+  /**
    Checks access to the observer for grammar violations. This includes
    checking for multiple [on_error] or [on_completed] calls, as well as
    reentrancy in any of the observer closures.
    If a violation is detected, a [Failure] exception is raised from the
    offending observer call.
-   *)
-  val checked : 'a RxCore.observer -> 'a RxCore.observer
+   */
 
-  (**
+  let checked: RxCore.observer('a) => RxCore.observer('a);
+
+  /**
    Synchronizes access to the observer such that its callback functions
    cannot be called concurrently from multiple threads. This function is
    useful when coordinating access to an observer. Notice reentrant observer
    callbacks on the same thread are still possible.
-   *)
-  val synchronize : 'a RxCore.observer -> 'a RxCore.observer
+   */
 
-  (**
+  let synchronize: RxCore.observer('a) => RxCore.observer('a);
+
+  /**
    Synchronizes access to the observer such that its callback methods
    cannot be called concurrently, using an asynchronous lock to protect
    against concurrent and reentrant access.  This function is useful when
    coordinating access to an observer.
-   *)
-  val synchronize_async_lock : 'a RxCore.observer -> 'a RxCore.observer
+   */
 
-end
+  let synchronize_async_lock: RxCore.observer('a) => RxCore.observer('a);
+};
 
-(** Provides a set of functions for creating subscriptions. *)
-module Subscription : sig
+/** Provides a set of functions for creating subscriptions. */
 
-  (** A subscription that does nothing. *)
-  val empty : RxCore.subscription
+module Subscription: {
+  /** A subscription that does nothing. */
 
-  (** A subscription which invokes the given closure when unsubscribed. *)
-  val create : (unit -> unit) -> RxCore.subscription
+  let empty: RxCore.subscription;
 
-  (** A subscription that wraps a task (Lwt cancelable thread) and cancels it
-   when unsubscribed. *)
-  val from_task : 'a Lwt.t -> RxCore.subscription
+  /** A subscription which invokes the given closure when unsubscribed. */
 
-  (**
+  let create: (unit => unit) => RxCore.subscription;
+
+  /** A subscription that wraps a task (Lwt cancelable thread) and cancels it
+   when unsubscribed. */
+
+  let from_task: Lwt.t('a) => RxCore.subscription;
+
+  /**
    Subscription that can be checked for status such as in a loop inside an
    observable to exit the loop if unsubscribed.
 
    @see <http://msdn.microsoft.com/en-us/library/system.reactive.disposables.booleandisposable.aspx> Rx.Net equivalent BooleanDisposable
-   *)
-  module type BooleanSubscription = sig
+   */
 
-    (** Subscription state. *)
-    type state
+  module type BooleanSubscription = {
+    /** Subscription state. */
 
-    (** Checks if the current subscription has been unsubscribed. *)
-    val is_unsubscribed : state -> bool
+    type state;
 
-  end
+    /** Checks if the current subscription has been unsubscribed. */
 
-  module Boolean : sig
+    let is_unsubscribed: state => bool;
+  };
 
-    include BooleanSubscription
+  module Boolean: {
+    include BooleanSubscription;
 
-    (** Creates a boolean subscription. Returns the subscription and its
-     state. *)
-    val create : (unit -> unit) -> (RxCore.subscription * state)
+    /** Creates a boolean subscription. Returns the subscription and its
+     state. */
 
-  end
+    let create: (unit => unit) => (RxCore.subscription, state);
+  };
 
-  (**
+  /**
    Subscription that represents a group of subscriptions that are unsubscribed
    together.
 
    @see <http://msdn.microsoft.com/en-us/library/system.reactive.disposables.compositedisposable.aspx> Rx.Net equivalent CompositeDisposable
-   *)
-  module Composite : sig
+   */
 
-    (** List of exceptions thrown by the subscriptions that failed. *)
-    exception CompositeException of exn list
+  module Composite: {
+    /** List of exceptions thrown by the subscriptions that failed. */
 
-    include BooleanSubscription
+    exception CompositeException(list(exn));
 
-    (** Creates a composite subscription from a list of subscriptions. Returns
-     the subscription and its state. *)
-    val create : RxCore.subscription list -> (RxCore.subscription * state)
+    include BooleanSubscription;
 
-    (** Adds a new subscription to the composite subscription. If the
+    /** Creates a composite subscription from a list of subscriptions. Returns
+     the subscription and its state. */
+
+    let create: list(RxCore.subscription) => (RxCore.subscription, state);
+
+    /** Adds a new subscription to the composite subscription. If the
      composite subscription is already unsubscribed, the added subscription
-     will be unsubscribed too. *)
-    val add : state -> RxCore.subscription -> unit
+     will be unsubscribed too. */
 
-    (** Removes (and unsubscribes) an existing subscription from the composite
-     subscription. *)
-    val remove : state -> RxCore.subscription -> unit
+    let add: (state, RxCore.subscription) => unit;
 
-    (** Clears the composite subscription and unsubscribes from all the
-     subscriptions contained. *)
-    val clear : state -> unit
+    /** Removes (and unsubscribes) an existing subscription from the composite
+     subscription. */
 
-  end
+    let remove: (state, RxCore.subscription) => unit;
 
-  (**
+    /** Clears the composite subscription and unsubscribes from all the
+     subscriptions contained. */
+
+    let clear: state => unit;
+  };
+
+  /**
    Subscription whose underlying subscription can be swapped for another
    subscription.
 
    @see <http://msdn.microsoft.com/en-us/library/system.reactive.disposables.multipleassignmentdisposable> Rx.Net equivalent MultipleAssignmentDisposable
-   *)
-  module MultipleAssignment : sig
-    include BooleanSubscription
+   */
 
-    (** Creates a multiple assignment subscription from a subscription. Returns
-     the subscription and its state. *)
-    val create : RxCore.subscription -> (RxCore.subscription * state)
+  module MultipleAssignment: {
+    include BooleanSubscription;
 
-    (** Sets the underlying subscription. *)
-    val set : state -> RxCore.subscription -> unit
+    /** Creates a multiple assignment subscription from a subscription. Returns
+     the subscription and its state. */
 
-  end
+    let create: RxCore.subscription => (RxCore.subscription, state);
 
-  (**
+    /** Sets the underlying subscription. */
+
+    let set: (state, RxCore.subscription) => unit;
+  };
+
+  /**
    Subscription which only allows a single assignment of its underlying
    subscription. If an underlying subscription has already been set, future
    attempts to set the underlying subscription will raise [Failure
    "SingleAssignment"].
 
    @see <https://rx.codeplex.com/SourceControl/latest#Rx.NET/Source/System.Reactive.Core/Reactive/Disposables/SingleAssignmentDisposable.cs> Rx.Net equivalent SingleAssignmentDisposable
-   *)
-  module SingleAssignment : sig
-    include BooleanSubscription
+   */
 
-    (** Creates a single assignment subscription from a subscription. Returns
-     the subscription and its state. *)
-    val create : unit -> (RxCore.subscription * state)
+  module SingleAssignment: {
+    include BooleanSubscription;
 
-    (** Sets the underlying subscription. If an underlying
+    /** Creates a single assignment subscription from a subscription. Returns
+     the subscription and its state. */
+
+    let create: unit => (RxCore.subscription, state);
+
+    /** Sets the underlying subscription. If an underlying
      subscription has already been set, the function will raise [Failure
-     "SingleAssignment"]. *)
-    val set : state -> RxCore.subscription -> unit
+     "SingleAssignment"]. */
 
-  end
+    let set: (state, RxCore.subscription) => unit;
+  };
+};
 
-end
+/** Represents an object that schedules units of work. */
 
-(** Represents an object that schedules units of work. *)
-module Scheduler : sig
+module Scheduler: {
+  /** Basic scheduler implementation */
 
-  (** Basic scheduler implementation *)
-  module type Base = sig
-    
-    (** Scheduler state. *)
-    type t
+  module type Base = {
+    /** Scheduler state. */
 
-    (** Returns the current timestamp. *)
-    val now : unit -> float
+    type t;
 
-    (** [schedule_absolute ?due_time action] schedules an [action] to be
+    /** Returns the current timestamp. */
+
+    let now: unit => float;
+
+    /** [schedule_absolute ?due_time action] schedules an [action] to be
      executed at [due_time]. If [due_time] is omitted, the action will be
-     performed as soon as possible. *)
-    val schedule_absolute :
-      ?due_time:float -> (unit -> RxCore.subscription) -> RxCore.subscription
+     performed as soon as possible. */
 
-  end
+    let schedule_absolute:
+      (~due_time: float=?, unit => RxCore.subscription) => RxCore.subscription;
+  };
 
-  module type S = sig
+  module type S = {
+    include Base;
 
-    include Base
+    /** [schedule_relative delay action] schedules an [action] to be
+     executed after [delay] seconds from now. */
 
-    (** [schedule_relative delay action] schedules an [action] to be
-     executed after [delay] seconds from now. *)
-    val schedule_relative :
-      float -> (unit -> RxCore.subscription) -> RxCore.subscription
+    let schedule_relative:
+      (float, unit => RxCore.subscription) => RxCore.subscription;
 
-    (** [schedule_recursive action] schedules a recursive [action] to be
+    /** [schedule_recursive action] schedules a recursive [action] to be
      executed as soon as possible. The [action] takes the next recursive step
-     (continuation) as parameter. *)
-    val schedule_recursive :
-      ((unit -> RxCore.subscription) -> RxCore.subscription) ->
-      RxCore.subscription
+     (continuation) as parameter. */
 
-    val schedule_periodically :
-      ?initial_delay:float -> float -> (unit -> RxCore.subscription) ->
-      RxCore.subscription
+    let schedule_recursive:
+      ((unit => RxCore.subscription) => RxCore.subscription) =>
+      RxCore.subscription;
 
-  end
+    let schedule_periodically:
+      (~initial_delay: float=?, float, unit => RxCore.subscription) =>
+      RxCore.subscription;
+  };
 
-  (** Builds a scheduler from its core function implementation. *)
-  module MakeScheduler :
-    functor (BaseScheduler : Base) -> S
+  /** Builds a scheduler from its core function implementation. */
 
-  (**
+  module MakeScheduler: (BaseScheduler: Base) => S;
+
+  /**
    Schedules work on the current thread but does not execute immediately.
    Work is put in a queue and executed after the current unit of work is
    completed.
-   *)
-  module CurrentThread : S
+   */
 
-  (**
+  module CurrentThread: S;
+
+  /**
    Executes work immediately on the current thread.
-   *)
-  module Immediate : S
+   */
 
-  (**
+  module Immediate: S;
+
+  /**
    Schedules work on a new thread.
-   *)
-  module NewThread : S
+   */
 
-  (**
+  module NewThread: S;
+
+  /**
    Schedules work using Lwt.
-   *)
-  module Lwt : S
+   */
 
-  (**
+  module Lwt: S;
+
+  /**
    Virtual time scheduler used for testing applications and libraries built
    using Reactive Extensions.
-   *)
-  module Test : sig
-    include S
+   */
 
-    (** Current timestamp in seconds. *)
-    val now : unit -> float
+  module Test: {
+    include S;
 
-    (**
+    /** Current timestamp in seconds. */
+
+    let now: unit => float;
+
+    /**
      [trigger_actions target_time] triggers all scheduled actions until
      [target_time] seconds.
-     *)
-    val trigger_actions : float -> unit
+     */
 
-    (**
+    let trigger_actions: float => unit;
+
+    /**
      [trigger_actions_until_now ()] triggers all scheduled actions until
      [now].
-     *)
-    val trigger_actions_until_now : unit -> unit
+     */
 
-    (**
+    let trigger_actions_until_now: unit => unit;
+
+    /**
      [advance_time_to target_time] sets the current timestamp to [target_time]
      and triggers all actions until that time.
-     *)
-    val advance_time_to : float -> unit
+     */
 
-    (**
+    let advance_time_to: float => unit;
+
+    /**
      [advance_time_by dealy] advances the current timestamp by [delay] seconds
      and triggers all actions until that time.
-     *)
-    val advance_time_by : float -> unit
+     */
 
-  end
+    let advance_time_by: float => unit;
+  };
+};
 
-end
+/** Observable combinators. */
 
-(** Observable combinators. *)
-module Observable : sig
-
-  (**
+module Observable: {
+  /**
    Returns an observable that emits no items to the observer and
    immediately invokes its [on_completed] closure.
 
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/empty.png> Marble diagram
    @see <https://github.com/Netflix/RxJava/wiki/Creating-Observables#empty-error-and-never> RxJava Wiki: empty()
    @see <http://msdn.microsoft.com/en-us/library/hh229670.aspx> MSDN: Observable.Empty
-   *)
-  val empty : 'a RxCore.observable
+   */
 
-  (**
+  let empty: RxCore.observable('a);
+
+  /**
    Returns an observable that invokes an observer's [on_error] closure when
    the observer subscribes to it.
 
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/error.png> Marble diagram
    @see <https://github.com/Netflix/RxJava/wiki/Creating-Observables#empty-error-and-never> RxJava Wiki: error()
    @see <http://msdn.microsoft.com/en-us/library/hh244299.aspx> MSDN: Observable.Throw
-  *)
-  val error : exn -> 'a RxCore.observable
+  */
 
-  (**
+  let error: exn => RxCore.observable('a);
+
+  /**
    Returns an observable that never sends any items or notifications to an
    observer.
 
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/never.png> Marble diagram
    @see <https://github.com/Netflix/RxJava/wiki/Creating-Observables#empty-error-and-never> RxJava Wiki: never()
-   *)
-  val never : 'a RxCore.observable
+   */
 
-  (**
+  let never: RxCore.observable('a);
+
+  /**
    Returns an observable that emits a single item and then completes.
 
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/just.png> Marble diagram
    @see <https://github.com/Netflix/RxJava/wiki/Creating-Observables#just> RxJava Wiki: just()
-   *)
-  val return : 'a -> 'a RxCore.observable
+   */
 
-  (**
+  let return: 'a => RxCore.observable('a);
+
+  /**
    Turns all of the emissions and notifications from a source observable into
    emissions marked with their original types within ['a RxCore.notification]
    values.
@@ -350,11 +379,12 @@ module Observable : sig
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/materialize.png> Marble diagram
    @see <https://github.com/Netflix/RxJava/wiki/Observable-Utility-Operators#materialize> RxJava Wiki: materialize()
    @see <http://msdn.microsoft.com/en-us/library/hh229453.aspx> MSDN: Observable.materialize
-   *)
-  val materialize :
-    'a RxCore.observable -> 'a RxCore.notification RxCore.observable
+   */
 
-  (**
+  let materialize:
+    RxCore.observable('a) => RxCore.observable(RxCore.notification('a));
+
+  /**
    Returns an observable that reverses the effect of [materialize] by
    transforming the ['a RxCore.notification] values emitted by the source
    observable into the items or notifications they represent.
@@ -362,81 +392,90 @@ module Observable : sig
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/dematerialize.png> Marble diagram
    @see <https://github.com/Netflix/RxJava/wiki/Observable-Utility-Operators#dematerialize> RxJava Wiki: dematerialize()
    @see <http://msdn.microsoft.com/en-us/library/hh229047.aspx> MSDN: Observable.dematerialize
-   *)
-  val dematerialize :
-    'a RxCore.notification RxCore.observable -> 'a RxCore.observable
+   */
 
-  (**
+  let dematerialize:
+    RxCore.observable(RxCore.notification('a)) => RxCore.observable('a);
+
+  /**
    Returns an observable emits the count of the total number of items
    emitted by the source observable.
 
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/count.png> Marble diagram
    @see <https://github.com/Netflix/RxJava/wiki/Mathematical-and-Aggregate-Operators#count-and-longcount> RxJava Wiki: count()
    @see <http://msdn.microsoft.com/en-us/library/hh229470.aspx> MSDN: Observable.Count
-   *)
-  val length : 'a RxCore.observable -> int RxCore.observable
+   */
 
-  (**
+  let length: RxCore.observable('a) => RxCore.observable(int);
+
+  /**
    Returns an observable that skips the first [n] items emitted by the source
    observable and emits the remainder.
 
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/skip.png> Marble diagram
    @see <https://github.com/Netflix/RxJava/wiki/Filtering-Observables#skip> RxJava Wiki: skip()
-   *)
-  val drop : int -> 'a RxCore.observable -> 'a RxCore.observable
+   */
 
-  (**
+  let drop: (int, RxCore.observable('a)) => RxCore.observable('a);
+
+  /**
    Returns an observable that emits only the first [n] items emitted by the
    source observable.
 
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/take.png> Marble diagram
    @see <https://github.com/Netflix/RxJava/wiki/Filtering-Observables#take> RxJava Wiki: take()
-   *)
-  val take : int -> 'a RxCore.observable -> 'a RxCore.observable
+   */
 
-  (**
+  let take: (int, RxCore.observable('a)) => RxCore.observable('a);
+
+  /**
    Returns an observable that emits only the last [n] items emitted by the
    source observable.
 
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/takeLast.n.png> Marble diagram
    @see <https://github.com/Netflix/RxJava/wiki/Filtering-Observables#takelast> RxJava Wiki: takeLast()
-   *)
-  val take_last : int -> 'a RxCore.observable -> 'a RxCore.observable
+   */
 
-  (**
+  let take_last: (int, RxCore.observable('a)) => RxCore.observable('a);
+
+  /**
    If the observable completes after emitting a single item, return an
    observable containing that item. If it emits more than one item or no
    item, raise a [Failure] exception.
 
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/single.png> Marble diagram
-   
+
    @see <https://github.com/Netflix/RxJava/wiki/Observable-Utility-Operators#single-and-singleordefault> RxJava Wiki: single()
    @see <https://rx.codeplex.com/SourceControl/latest#Rx.NET/Source/System.Reactive.Linq/Reactive/Linq/Observable/SingleAsync.cs> SingleAsync.cs
-   *)
-  val single : 'a RxCore.observable -> 'a RxCore.observable
+   */
 
-  (**
+  let single: RxCore.observable('a) => RxCore.observable('a);
+
+  /**
    Returns an observable that emits the items emitted by two observables, one
    after the other.
 
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/concat.png> Marble diagram
    @see <https://github.com/Netflix/RxJava/wiki/Mathematical-and-Aggregate-Operators#concat> RxJava Wiki: concat()
    @see <http://msdn.microsoft.com/en-us/library/system.reactive.linq.observable.concat.aspx> MSDN: Observable.Concat
-   *)
-  val append :
-    'a RxCore.observable -> 'a RxCore.observable -> 'a RxCore.observable
+   */
 
-  (**
+  let append:
+    (RxCore.observable('a), RxCore.observable('a)) => RxCore.observable('a);
+
+  /**
    Flattens a sequence of observables emitted by an observable into one
    observable, without any transformation.
 
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/merge.png> Marble diagram
    @see <https://github.com/Netflix/RxJava/wiki/Combining-Observables#merge> RxJava Wiki: merge()
    @see <http://msdn.microsoft.com/en-us/library/hh229099.aspx> MSDN: Observable.Merge
-   *)
-  val merge : 'a RxCore.observable RxCore.observable -> 'a RxCore.observable
+   */
 
-  (**
+  let merge:
+    RxCore.observable(RxCore.observable('a)) => RxCore.observable('a);
+
+  /**
    Returns an observable that applies the given function to each item
    emitted by an observable and emits the results of these function
    applications.
@@ -444,10 +483,11 @@ module Observable : sig
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/map.png> Marble diagram
    @see <https://github.com/Netflix/RxJava/wiki/Transforming-Observables#map> RxJava Wiki: map()
    @see <http://msdn.microsoft.com/en-us/library/hh244306.aspx> MSDN: Observable.Select
-   *)
-  val map : ('a -> 'b) -> 'a RxCore.observable -> 'b RxCore.observable
+   */
 
-  (**
+  let map: ('a => 'b, RxCore.observable('a)) => RxCore.observable('b);
+
+  /**
    Creates a new observable by applying a function that you supply to each
    item emitted by the source observable, where that function returns an
    observable, and then merging those resulting observables and emitting the
@@ -455,106 +495,115 @@ module Observable : sig
 
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/flatMap.png> Marble diagram
    @see <https://github.com/Netflix/RxJava/wiki/Transforming-Observables#mapmany-or-flatmap-and-mapmanydelayerror> RxJava Wiki: flatMap()
-   *)
-  val bind :
-    'a RxCore.observable -> ('a -> 'b RxCore.observable) ->
-    'b RxCore.observable
+   */
 
-  (**
+  let bind:
+    (RxCore.observable('a), 'a => RxCore.observable('b)) =>
+    RxCore.observable('b);
+
+  /**
    Provides blocking combinators.
-   
-   @see <https://github.com/Netflix/RxJava/wiki/Blocking-Observable-Operators> Blocking Observable Operators
-   *)
-  module Blocking : sig
 
-    (**
+   @see <https://github.com/Netflix/RxJava/wiki/Blocking-Observable-Operators> Blocking Observable Operators
+   */
+
+  module Blocking: {
+    /**
      Converts an observable into an enum.
 
      @see <https://github.com/Netflix/RxJava/wiki/images/rx-operators/B.toIterable.png> Marble diagram
      @see <https://github.com/Netflix/RxJava/wiki/Blocking-Observable-Operators#transformations-tofuture-toiterable-and-toiteratorgetiterator> RxJava Wiki: toIterable()
-     *)
-    val to_enum : 'a RxCore.observable -> 'a BatEnum.t
+     */
 
-    (**
+    let to_enum: RxCore.observable('a) => BatEnum.t('a);
+
+    /**
      If the observable completes after emitting a single item, return
      that item, otherwise raise a [Failure] exception.
 
      @see <https://github.com/Netflix/RxJava/wiki/images/rx-operators/B.single.png> Marble diagram
      @see <https://github.com/Netflix/RxJava/wiki/Blocking-Observable-Operators#single-and-singleordefault> RxJava Wiki: single()
      @see <http://msdn.microsoft.com/en-us/library/system.reactive.linq.observable.single.aspx> MSDN: Observable.Single
-     *)
-    val single : 'a RxCore.observable -> 'a
+     */
 
-  end
+    let single: RxCore.observable('a) => 'a;
+  };
 
-  (**
+  /**
    Specifies the basic functions to integrate a scheduler with the
    observable combinators.
-   *)
-  module type Scheduled = sig
+   */
 
-    (**
+  module type Scheduled = {
+    /**
      Asynchronously subscribes and unsubscribes observers on the current
      scheduler.
 
      @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/subscribeOn.png> Marble diagram
      @see <https://github.com/Netflix/RxJava/wiki/Observable-Utility-Operators#subscribeon> RxJava Wiki: subscribeOn()
-     *)
-    val subscribe_on_this : 'a RxCore.observable -> 'a RxCore.observable
+     */
 
-    (**
+    let subscribe_on_this: RxCore.observable('a) => RxCore.observable('a);
+
+    /**
      Converts a ['a BatEnum.t] sequence into an observable with the current
      scheduler.
 
      @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/from.s.png> Marble diagram
      @see <https://github.com/Netflix/RxJava/wiki/Creating-Observables#from> RxJava Wiki: from()
      @see <http://msdn.microsoft.com/en-us/library/hh212140.aspx> MSDN: Observable.ToObservable
-     *)
-    val of_enum : 'a BatEnum.t -> 'a RxCore.observable
+     */
 
-    (**
+    let of_enum: BatEnum.t('a) => RxCore.observable('a);
+
+    /**
      Returns an observable that emits an item each time interval, containing
      a sequential number.
 
      @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/interval.png> Marble diagram
      @see <https://github.com/Netflix/RxJava/wiki/Creating-Observables#interval> RxJava Wiki: interval()
      @see <http://msdn.microsoft.com/en-us/library/hh229027.aspx> MSDN: Observable.Interval
-     *)
-    val interval : float -> int RxCore.observable
+     */
 
-  end
+    let interval: float => RxCore.observable(int);
+  };
 
-  (** Provides combinators on a specific scheduler. *)
-  module MakeScheduled :
-    functor(Scheduler : Scheduler.S) -> Scheduled
+  /** Provides combinators on a specific scheduler. */
 
-  (** Provides combinators on the current thread scheduler. *)
-  module CurrentThread : Scheduled
+  module MakeScheduled: (Scheduler: Scheduler.S) => Scheduled;
 
-  (** Provides combinators on the immediate scheduler. *)
-  module Immediate : Scheduled
+  /** Provides combinators on the current thread scheduler. */
 
-  (** Provides combinators on the new thread scheduler. *)
-  module NewThread : Scheduled
+  module CurrentThread: Scheduled;
 
-  (** Provides combinators on the Lwt scheduler. *)
-  module Lwt : Scheduled
+  /** Provides combinators on the immediate scheduler. */
 
-  (** Provides combinators on the test scheduler. *)
-  module Test : Scheduled
+  module Immediate: Scheduled;
 
-end
+  /** Provides combinators on the new thread scheduler. */
 
-(** Provides a set of functions for creating subjects. *)
-module Subject : sig
+  module NewThread: Scheduled;
 
-  (**
+  /** Provides combinators on the Lwt scheduler. */
+
+  module Lwt: Scheduled;
+
+  /** Provides combinators on the test scheduler. */
+
+  module Test: Scheduled;
+};
+
+/** Provides a set of functions for creating subjects. */
+
+module Subject: {
+  /**
    Creates a subject that broadcasts each notification to all subscribed
    observers.
-   *)
-  val create : unit -> 'a RxCore.subject * RxCore.subscription
+   */
 
-  (**
+  let create: unit => (RxCore.subject('a), RxCore.subscription);
+
+  /**
    Subject that retains all events and will replay them to an observer that
    subscribes.
 
@@ -574,18 +623,18 @@ module Subject : sig
    ]}
 
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/S.ReplaySubject.png> RxJava ReplaySubject
-   *)
-  module Replay : sig
+   */
 
-    (**
+  module Replay: {
+    /**
      Creates a subject that broadcasts each notification to all subscribed
      and future observers.
-     *)
-    val create : unit -> 'a RxCore.subject * RxCore.subscription
+     */
 
-  end
+    let create: unit => (RxCore.subject('a), RxCore.subscription);
+  };
 
-  (**
+  /**
    Subject that publishes the most recent and all subsequent events to each
    subscribed observer.
 
@@ -598,7 +647,7 @@ module Subject : sig
      on_next "one";
      on_next "two";
      on_next "three";
-     
+
      (* observer will receive the "one", "two" and "three" events, but not
       * "zero" *)
      let (subject, unsubscribe) = Rx.Subject.Behavior.create "default" in
@@ -608,7 +657,7 @@ module Subject : sig
      let _ = observable observer in
      on_next "two";
      on_next "three";
-     
+
      (* observer will receive only on_completed *)
      let (subject, unsubscribe) = Rx.Subject.Behavior.create "default" in
      let ((on_completed, _, on_next), observable) = subject in
@@ -616,7 +665,7 @@ module Subject : sig
      on_next "one";
      on_completed ();
      let _ = observable observer in
-     
+
      (* observer will receive only on_error *)
      let (subject, unsubscribe) = Rx.Subject.Behavior.create "default" in
      let ((_, on_error, on_next), observable) = subject in
@@ -627,19 +676,19 @@ module Subject : sig
    ]}
 
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/S.BehaviorSubject.png> RxJava BehaviorSubject
-   *)
-  module Behavior : sig
+   */
 
-    (**
+  module Behavior: {
+    /**
       Creates a value that changes over time. Observers can subscribe to the
       subject to receive the last (or initial) value and all subsequent
       notifications.
-     *)
-    val create : 'a -> 'a RxCore.subject * RxCore.subscription
+     */
 
-  end
+    let create: 'a => (RxCore.subject('a), RxCore.subscription);
+  };
 
-  (**
+  /**
    Subject that publishes only the last event to each observer that has
    subscribed when the sequence completes.
 
@@ -653,7 +702,7 @@ module Subject : sig
      on_next "one";
      on_next "two";
      on_next "three";
-     
+
      (* observer will receive "three" as the only on_next event. *)
      let (subject, unsubscribe) = Rx.Subject.Async.create () in
      let ((_, _, on_next), observable) = subject in
@@ -665,17 +714,15 @@ module Subject : sig
    ]}
 
    @see <https://raw.github.com/wiki/Netflix/RxJava/images/rx-operators/S.AsyncSubject.png> RxJava AsyncSubject
-   *)
-  module Async : sig
+   */
 
-    (**
+  module Async: {
+    /**
       Creates a value that represents the result of an asynchronous operation.
       The last value before the on_completed notification, or the error
       received through on_error, is sent to all subscribed observers.
-     *)
-    val create : unit -> 'a RxCore.subject * RxCore.subscription
+     */
 
-  end
-
-end
-
+    let create: unit => (RxCore.subject('a), RxCore.subscription);
+  };
+};
