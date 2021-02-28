@@ -1,0 +1,30 @@
+{
+    "name": "rxocaml",
+    "sources": [
+        {
+            "dir": "src",
+            "files": [
+                "rx.re",
+                "rxAsyncLock.rei",
+                "rxAsyncLock.re",
+                "rxAtomicData.rei",
+                "rxAtomicData.re",
+                "rxCore.rei",
+                "rxCore.re",
+                "rxObservable.rei",
+                "rxObservable.re",
+                "rxObserver.rei",
+                "rxObserver.re",
+                "rxScheduler.rei",
+                "rxScheduler.re",
+                "rxSubject.rei",
+                "rxSubject.re",
+                "rxSubscription.rei",
+                "rxSubscription.re"
+            ]
+        },
+        {
+            "dir": "examples"
+        }
+    ]
+}

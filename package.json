@@ -1,0 +1,24 @@
+{
+  "name": "rxocaml",
+  "version": "0.0.14",
+  "keywords": [
+    "bucklescript",
+    "bsb",
+    "reason",
+    "reasonml",
+    "ocaml",
+    "bs-platform"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build": "bsb -clean-world -make-world",
+    "watch": "bsb -clean-world -make-world -w"
+  },
+  "dependencies": {"bs-batteries": "git+https://github.com/prozacchiwawa/bs-batteries#fstar"},
+  "peerDependencies": {
+    "bs-platform": "^8.4.2"
+  },
+  "devDependencies": {
+    "bs-platform": "^8.4.2"
+  }
+}
